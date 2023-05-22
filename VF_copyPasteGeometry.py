@@ -1,7 +1,7 @@
 bl_info = {
 	'name': 'VF Copy Paste Geometry',
 	'author': 'John Einselen - Vectorform LLC',
-	'version': (0, 0, 3),
+	'version': (0, 0, 4),
 	'blender': (3, 5, 0),
 	'location': 'Scene > VF Tools > Copy Paste',
 	'description': 'Copy and paste geometry using internal mesh system (prevents duplication of materials)',
@@ -33,6 +33,10 @@ class VF_CopyGeometry(bpy.types.Operator):
 	def execute(self, context):
 		# Get the current active object
 		active_object = context.active_object
+		
+		# Toggle object/edit mode to ensure the current selection is correctly implemented
+		bpy.ops.object.mode_set(mode='OBJECT')
+		bpy.ops.object.mode_set(mode='EDIT')
 		
 		# Save the current mesh or curve/surface selection
 		original_selection = []
@@ -101,23 +105,26 @@ class VF_CopyGeometry(bpy.types.Operator):
 		temp_object.name = 'VF-Clipboard-TEMP'
 		data_block = temp_object.data
 		
+		# Target clipboard name
+		clipboard_name = 'VF-PersistentClipboard-' + active_object.type
+		
 		# Remove previous persistent clipboard data if it exists
-		if temp_object.type == 'MESH' and bpy.data.meshes.get('VF-PersistentClipboard-MESH'):
-			bpy.data.meshes.remove(bpy.data.meshes.get('VF-PersistentClipboard-MESH'))
-		elif temp_object.type == 'CURVE' and bpy.data.curves.get('VF-PersistentClipboard-CURVE'):
-			bpy.data.curves.remove(bpy.data.curves.get('VF-PersistentClipboard-CURVE'))
-		elif temp_object.type == 'SURFACE' and bpy.data.curves.get('VF-PersistentClipboard-SURFACE'):
-			bpy.data.curves.remove(bpy.data.curves.get('VF-PersistentClipboard-SURFACE'))
+		if temp_object.type == 'MESH' and bpy.data.meshes.get(clipboard_name):
+			bpy.data.meshes.remove(bpy.data.meshes.get(clipboard_name))
+		elif temp_object.type == 'CURVE' and bpy.data.curves.get(clipboard_name):
+			bpy.data.curves.remove(bpy.data.curves.get(clipboard_name))
+		elif temp_object.type == 'SURFACE' and bpy.data.curves.get(clipboard_name):
+			bpy.data.curves.remove(bpy.data.curves.get(clipboard_name))
 		
 		# Rename the data block and save it as persistent
 		data_block = temp_object.data
-		data_block.name = 'VF-PersistentClipboard-' + active_object.type
+		data_block.name = clipboard_name
 		data_block.use_fake_user = True
-		
+				
 		# Delete the temporary object
 		bpy.data.objects.remove(temp_object)
 		
-		print('elements copied')
+		print('element(s) copied')
 		return {'FINISHED'}
 
 class VF_PasteGeometry(bpy.types.Operator):
@@ -127,22 +134,31 @@ class VF_PasteGeometry(bpy.types.Operator):
 	
 	@classmethod
 	def poll(cls, context):
-#		return context.mode == 'EDIT_MESH'
 		return (
 			context.active_object
 			and context.active_object.type in {'MESH', 'CURVE', 'SURFACE'}
 			and context.mode in {'EDIT_MESH', 'EDIT_CURVE', 'EDIT_SURFACE'}
-			and bpy.data.meshes.get('VF-PersistentClipboard-' + context.active_object.type)
+			and (
+				bpy.data.meshes.get('VF-PersistentClipboard-' + context.active_object.type)
+				or bpy.data.curves.get('VF-PersistentClipboard-' + context.active_object.type)
+			)
 		)
 	
 	def execute(self, context):
 		# Get the current active object
 		active_object = context.active_object
 		
+		# Select everything, to be inverted after joining
+		if active_object.type == 'MESH':
+			bpy.ops.mesh.select_all(action='SELECT')
+		else:
+			bpy.ops.curve.select_all(action='SELECT')
+			# This appears to not be working on nurb surfaces, and I don't know why
+		
 		# Switch to object mode for joining
 		bpy.ops.object.mode_set(mode='OBJECT')
 		
-		# Count total elements before joining
+		# Count total elements before joining (assuming Blender always joins the new geometry at the end of the index)
 		element_count = 0
 		if active_object.type == 'MESH':
 			# Vertex selection mode
@@ -157,20 +173,51 @@ class VF_PasteGeometry(bpy.types.Operator):
 		else:
 			element_count = len(active_object.data.splines)
 		
-#		bpy.data.meshes.get('VF-PersistentClipboard-MESH')
-#		bpy.data.curves.get('VF-PersistentClipboard-CURVE')
-#		bpy.data.curves.get('VF-PersistentClipboard-SURFACE')
-#		bpy.data.metaballs.get('VF-PersistentClipboard-META')
+		# Source clipboard name (we've already checked that it exists)
+		clipboard_name = 'VF-PersistentClipboard-' + active_object.type
 		
-		print('elements pasted')
+		# Create a new object
+		if active_object.type == 'MESH':
+			pasted_object = bpy.data.objects.new(clipboard_name, bpy.data.meshes[clipboard_name])
+		else:
+			pasted_object = bpy.data.objects.new(clipboard_name, bpy.data.curves[clipboard_name])
+		
+		# Link the new object to the scene
+		context.scene.collection.objects.link(pasted_object)
+		
+		# Set the object's location, rotation, and scale to match the active object
+		pasted_object.location = active_object.location
+		pasted_object.rotation_euler = active_object.rotation_euler
+		pasted_object.scale = active_object.scale
+		
+		# Select the new object
+		pasted_object.select_set(True)
+		
+		# Update the viewport and scene
+		bpy.context.view_layer.update()
+		
+		# Join pasted object with active object
+		bpy.ops.object.join()
+		
+		# Switch to edit mode
+		bpy.ops.object.mode_set(mode='EDIT')
+		
+		# Invert selection so that the joined geometry is selected
+		if active_object.type == 'MESH':
+			bpy.ops.mesh.select_all(action='INVERT')
+		else:
+			bpy.ops.curve.select_all(action='INVERT')
+			# This appears to not be working on nurb surfaces, and I don't know why
+		
+		print('element(s) pasted')
 		return {'FINISHED'}
-
-
 
 ###########################################################################
 # Plugin preferences
 	
-	# Option to enable persistent clipboards (preserve unused geometry data blocks)
+	# Potential options:
+	# Option to disable persistent clipboard data (would not persist between close/open cycles)
+	# Option to preserve original location or new location
 
 ###########################################################################
 # UI rendering class
