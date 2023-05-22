@@ -1,7 +1,7 @@
 bl_info = {
 	'name': 'VF Copy Paste Geometry',
 	'author': 'John Einselen - Vectorform LLC',
-	'version': (0, 0, 2),
+	'version': (0, 0, 3),
 	'blender': (3, 5, 0),
 	'location': 'Scene > VF Tools > Copy Paste',
 	'description': 'Copy and paste geometry using internal mesh system (prevents duplication of materials)',
@@ -34,21 +34,29 @@ class VF_CopyGeometry(bpy.types.Operator):
 		# Get the current active object
 		active_object = context.active_object
 		
-		# Save the current selection
+		# Save the current mesh or curve/surface selection
 		original_selection = []
-		if bpy.context.object.type == 'MESH':
-			if bpy.context.tool_settings.mesh_select_mode[0]:  # Vertex selection mode
-				original_selection = [v.select for v in active_object.data.vertices]
-			elif bpy.context.tool_settings.mesh_select_mode[1]:  # Edge selection mode
+		if active_object.type == 'MESH':
+			# Vertex selection mode
+			if bpy.context.tool_settings.mesh_select_mode[0]:
+				for i, v in enumerate(active_object.data.vertices):
+					original_selection.append( active_object.data.vertices[i].select)
+			# Edge selection mode
+			elif bpy.context.tool_settings.mesh_select_mode[1]:
 				original_selection = [e.select for e in active_object.data.edges]
-			elif bpy.context.tool_settings.mesh_select_mode[2]:  # Face selection mode
+			# Face selection mode
+			elif bpy.context.tool_settings.mesh_select_mode[2]:
 				original_selection = [p.select for p in active_object.data.polygons]
-		elif bpy.context.object.type == 'CURVE':
-			if bpy.context.mode == 'EDIT_CURVE':
-				original_selection = [s.select for s in active_object.data.splines]
-		elif bpy.context.object.type == 'SURFACE':
-			if bpy.context.mode == 'EDIT_SURFACE':
-				original_selection = [s.select for s in active_object.data.splines]
+		else:
+			# Get each curve or surface spline
+			for s_i, s in enumerate(active_object.data.splines):
+				temp_array = []
+				# Get each point in the curve or surface spline
+				for p_i, p in enumerate(active_object.data.splines[s_i].points):
+					# Save point select status to temporary array
+					temp_array.append(active_object.data.splines[s_i].points[p_i].select)
+				# Append temporary array to the main array
+				original_selection.append(temp_array)
 		
 		# Split the selection into a new object (duplicate first if copy is enabled)
 		if active_object.type == 'MESH':
@@ -62,29 +70,30 @@ class VF_CopyGeometry(bpy.types.Operator):
 		
 		# Restore the original selection
 		if len(original_selection) > 0:
-			if bpy.context.object.type == 'MESH':
-				if bpy.context.tool_settings.mesh_select_mode[0]:  # Vertex selection mode
+			if active_object.type == 'MESH':
+				# Switch into object mode to set vertex selection state without converting to bmesh
+				bpy.ops.object.mode_set(mode='OBJECT')
+				
+				# Vertex selection mode
+				if bpy.context.tool_settings.mesh_select_mode[0]:
 					for i, v in enumerate(active_object.data.vertices):
 						v.select = original_selection[i]
-						print('Original Vertex Selection: %s'%original_selection[i])
-				elif bpy.context.tool_settings.mesh_select_mode[1]:  # Edge selection mode
+				# Edge selection mode
+				elif bpy.context.tool_settings.mesh_select_mode[1]:
 					for i, e in enumerate(active_object.data.edges):
 						e.select = original_selection[i]
-						print('Original Edge Selection: %s'%original_selection[i])
-				elif bpy.context.tool_settings.mesh_select_mode[2]:  # Face selection mode
+				# Face selection mode
+				elif bpy.context.tool_settings.mesh_select_mode[2]:
 					for i, p in enumerate(active_object.data.polygons):
 						p.select = original_selection[i]
-						print('Original Polygon Selection: %s'%original_selection[i])
-			elif bpy.context.object.type == 'CURVE':
-				if bpy.context.mode == 'EDIT_CURVE':
-					for i, s in enumerate(active_object.data.splines):
-						s.select = original_selection[i]
-						print('Original Curve Point Selection: %s'%original_selection[i])
-			elif bpy.context.object.type == 'SURFACE':
-				if bpy.context.mode == 'EDIT_SURFACE':
-					for i, s in enumerate(active_object.data.splines):
-						s.select = original_selection[i]
-						print('Original NURB Point Selection: %s'%original_selection[i])
+				
+				# Switch back to edit mode
+				bpy.ops.object.mode_set(mode='EDIT')
+			else:
+				for spline_i, s in enumerate(active_object.data.splines):
+					for point_i, p in enumerate(s.points):
+						p.select = original_selection[spline_i][point_i]
+					original_selection.append(temp_array)
 		
 		# Get the newly created object and data block reference
 		# This seems potentially brittle; assumes separated object always shows up as last selected object
@@ -108,7 +117,7 @@ class VF_CopyGeometry(bpy.types.Operator):
 		# Delete the temporary object
 		bpy.data.objects.remove(temp_object)
 		
-		print('geometry copied')
+		print('elements copied')
 		return {'FINISHED'}
 
 class VF_PasteGeometry(bpy.types.Operator):
@@ -127,12 +136,33 @@ class VF_PasteGeometry(bpy.types.Operator):
 		)
 	
 	def execute(self, context):
+		# Get the current active object
+		active_object = context.active_object
+		
+		# Switch to object mode for joining
+		bpy.ops.object.mode_set(mode='OBJECT')
+		
+		# Count total elements before joining
+		element_count = 0
+		if active_object.type == 'MESH':
+			# Vertex selection mode
+			if bpy.context.tool_settings.mesh_select_mode[0]:
+				element_count = len(active_object.data.vertices)
+			# Edge selection mode
+			elif bpy.context.tool_settings.mesh_select_mode[1]:
+				element_count = len(active_object.data.edges)
+			# Face selection mode
+			elif bpy.context.tool_settings.mesh_select_mode[2]:
+				element_count = len(active_object.data.polygons)
+		else:
+			element_count = len(active_object.data.splines)
+		
 #		bpy.data.meshes.get('VF-PersistentClipboard-MESH')
 #		bpy.data.curves.get('VF-PersistentClipboard-CURVE')
 #		bpy.data.curves.get('VF-PersistentClipboard-SURFACE')
 #		bpy.data.metaballs.get('VF-PersistentClipboard-META')
 		
-		print('geometry pasted')
+		print('elements pasted')
 		return {'FINISHED'}
 
 
