@@ -1,7 +1,7 @@
 bl_info = {
 	'name': 'VF Copy Paste Geometry',
 	'author': 'John Einselen - Vectorform LLC',
-	'version': (0, 0, 6),
+	'version': (0, 0, 7),
 	'blender': (3, 5, 0),
 	'location': 'Scene > VF Tools > Copy Paste',
 	'description': 'Copy and paste geometry using internal mesh system (prevents duplication of materials)',
@@ -301,14 +301,53 @@ class VFTOOLS_PT_copy_paste_geometry(bpy.types.Panel):
 
 classes = (VF_CopyGeometry, VF_PasteGeometry, VFTOOLS_PT_copy_paste_geometry)
 
+addon_keymaps = []
+
 def register():
 	for cls in classes:
 		bpy.utils.register_class(cls)
 	
+	# Add keyboard shortcuts
+	wm = bpy.context.window_manager
+	kc = wm.keyconfigs.addon
+	# Mesh keyboard commands (implements both Windows and MacOS default keymaps)
+	if kc:
+		km = wm.keyconfigs.addon.keymaps.new(name='3D View', space_type='VIEW_3D')
+		kmi = km.keymap_items.new(VF_CopyGeometry.bl_idname, 'X', 'PRESS', ctrl=True)
+		kmi.properties.copy = False
+		addon_keymaps.append((km, kmi))
+	if kc:
+		km = wm.keyconfigs.addon.keymaps.new(name='3D View', space_type='VIEW_3D')
+		kmi = km.keymap_items.new(VF_CopyGeometry.bl_idname, 'X', 'PRESS', oskey=True)
+		kmi.properties.copy = False
+		addon_keymaps.append((km, kmi))
+	if kc:
+		km = wm.keyconfigs.addon.keymaps.new(name='3D View', space_type='VIEW_3D')
+		kmi = km.keymap_items.new(VF_CopyGeometry.bl_idname, 'C', 'PRESS', ctrl=True)
+		kmi.properties.copy = True
+		addon_keymaps.append((km, kmi))
+	if kc:
+		km = wm.keyconfigs.addon.keymaps.new(name='3D View', space_type='VIEW_3D')
+		kmi = km.keymap_items.new(VF_CopyGeometry.bl_idname, 'C', 'PRESS', oskey=True)
+		kmi.properties.copy = True
+		addon_keymaps.append((km, kmi))
+	if kc:
+		km = wm.keyconfigs.addon.keymaps.new(name='3D View', space_type='VIEW_3D')
+		kmi = km.keymap_items.new(VF_PasteGeometry.bl_idname, 'V', 'PRESS', ctrl=True)
+		addon_keymaps.append((km, kmi))
+	if kc:
+		km = wm.keyconfigs.addon.keymaps.new(name='3D View', space_type='VIEW_3D')
+		kmi = km.keymap_items.new(VF_PasteGeometry.bl_idname, 'V', 'PRESS', oskey=True)
+		addon_keymaps.append((km, kmi))
 	
 def unregister():
 	for cls in reversed(classes):
 		bpy.utils.unregister_class(cls)
+	
+	# Remove keyboard shortcuts
+	for km, kmi in addon_keymaps:
+		km.keymap_items.remove(kmi)
+	addon_keymaps.clear()
 
 if __name__ == '__main__':
 	register()
