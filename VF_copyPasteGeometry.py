@@ -1,14 +1,14 @@
 bl_info = {
 	'name': 'VF Copy Paste Geometry',
 	'author': 'John Einselen - Vectorform LLC',
-	'version': (0, 0, 4),
+	'version': (0, 0, 5),
 	'blender': (3, 5, 0),
 	'location': 'Scene > VF Tools > Copy Paste',
 	'description': 'Copy and paste geometry using internal mesh system (prevents duplication of materials)',
 	'warning': 'inexperienced developer, use at your own risk',
 	'wiki_url': '',
 	'tracker_url': '',
-	'category': '3D View'}
+	'category': 'Mesh'}
 
 import bpy
 
@@ -31,45 +31,58 @@ class VF_CopyGeometry(bpy.types.Operator):
 		)
 	
 	def execute(self, context):
+		# Switch to object mode to ensure modified object selections are recognised in edit mode
+		# Toggling between object/edit is also required for Blender to recognise geometry selection changes (why is this a thing)
+		bpy.ops.object.mode_set(mode='OBJECT')
+		
+		# Save the current object selection
+		# To prevent weirdness, only cut/copy geometry from the active object
+		selected_objects = [obj for obj in context.selected_objects]
+		
 		# Get the current active object
 		active_object = context.active_object
+				
+		# Select only the active object
+		for obj in context.selected_objects:
+			if obj != active_object:
+				obj.select_set(False)
 		
-		# Toggle object/edit mode to ensure the current selection is correctly implemented
-		bpy.ops.object.mode_set(mode='OBJECT')
+		# Toggle back into edit mode (even without object selection changes, this is required for Blender geometry selection recognition)
 		bpy.ops.object.mode_set(mode='EDIT')
 		
-		# Save the current mesh or curve/surface selection
+		# Split the selected geometry into a new object
+		# If copy is enabled, preserve selection state and duplicate the selection first
 		original_selection = []
 		if active_object.type == 'MESH':
-			# Vertex selection mode
-			if bpy.context.tool_settings.mesh_select_mode[0]:
-				for i, v in enumerate(active_object.data.vertices):
-					original_selection.append( active_object.data.vertices[i].select)
-			# Edge selection mode
-			elif bpy.context.tool_settings.mesh_select_mode[1]:
-				original_selection = [e.select for e in active_object.data.edges]
-			# Face selection mode
-			elif bpy.context.tool_settings.mesh_select_mode[2]:
-				original_selection = [p.select for p in active_object.data.polygons]
-		else:
-			# Get each curve or surface spline
-			for s_i, s in enumerate(active_object.data.splines):
-				temp_array = []
-				# Get each point in the curve or surface spline
-				for p_i, p in enumerate(active_object.data.splines[s_i].points):
-					# Save point select status to temporary array
-					temp_array.append(active_object.data.splines[s_i].points[p_i].select)
-				# Append temporary array to the main array
-				original_selection.append(temp_array)
-		
-		# Split the selection into a new object (duplicate first if copy is enabled)
-		if active_object.type == 'MESH':
 			if self.copy:
+				# Vertex selection mode
+				if context.tool_settings.mesh_select_mode[0]:
+					for i, v in enumerate(active_object.data.vertices):
+						original_selection.append( active_object.data.vertices[i].select)
+				# Edge selection mode
+				elif context.tool_settings.mesh_select_mode[1]:
+					original_selection = [e.select for e in active_object.data.edges]
+				# Face selection mode
+				elif context.tool_settings.mesh_select_mode[2]:
+					original_selection = [p.select for p in active_object.data.polygons]
+				# Duplicate selection
 				bpy.ops.mesh.duplicate()
+			# Separate selection
 			bpy.ops.mesh.separate(type='SELECTED')
 		else:
 			if self.copy:
+				# Get each curve or surface spline
+				for s_i, s in enumerate(active_object.data.splines):
+					temp_array = []
+					# Get each point in the curve or surface spline
+					for p_i, p in enumerate(active_object.data.splines[s_i].points):
+						# Save point select status to temporary array
+						temp_array.append(active_object.data.splines[s_i].points[p_i].select)
+					# Append temporary array to the main array
+					original_selection.append(temp_array)
+				# Duplicate selection
 				bpy.ops.curve.duplicate() # bpy.ops.curve.duplicate_move()
+			# Separate selection
 			bpy.ops.curve.separate()
 		
 		# Restore the original selection
@@ -79,15 +92,15 @@ class VF_CopyGeometry(bpy.types.Operator):
 				bpy.ops.object.mode_set(mode='OBJECT')
 				
 				# Vertex selection mode
-				if bpy.context.tool_settings.mesh_select_mode[0]:
+				if context.tool_settings.mesh_select_mode[0]:
 					for i, v in enumerate(active_object.data.vertices):
 						v.select = original_selection[i]
 				# Edge selection mode
-				elif bpy.context.tool_settings.mesh_select_mode[1]:
+				elif context.tool_settings.mesh_select_mode[1]:
 					for i, e in enumerate(active_object.data.edges):
 						e.select = original_selection[i]
 				# Face selection mode
-				elif bpy.context.tool_settings.mesh_select_mode[2]:
+				elif context.tool_settings.mesh_select_mode[2]:
 					for i, p in enumerate(active_object.data.polygons):
 						p.select = original_selection[i]
 				
@@ -123,6 +136,16 @@ class VF_CopyGeometry(bpy.types.Operator):
 				
 		# Delete the temporary object
 		bpy.data.objects.remove(temp_object)
+		
+		# If more than one object was originally selected, restore that selection set
+		if len(selected_objects) > 0:
+			# If we don't change modes when re-selecting the original objects, the selection will be updated but the multiple objects selected will remain in object mode
+			bpy.ops.object.mode_set(mode='OBJECT')
+			# Re-select previously selected objects
+			for obj in selected_objects:
+				obj.select_set(True)
+			# Switch back to edit mode, ensuring all selected objects are editable
+			bpy.ops.object.mode_set(mode='EDIT')
 		
 		print('element(s) copied')
 		return {'FINISHED'}
@@ -162,13 +185,13 @@ class VF_PasteGeometry(bpy.types.Operator):
 		element_count = 0
 		if active_object.type == 'MESH':
 			# Vertex selection mode
-			if bpy.context.tool_settings.mesh_select_mode[0]:
+			if context.tool_settings.mesh_select_mode[0]:
 				element_count = len(active_object.data.vertices)
 			# Edge selection mode
-			elif bpy.context.tool_settings.mesh_select_mode[1]:
+			elif context.tool_settings.mesh_select_mode[1]:
 				element_count = len(active_object.data.edges)
 			# Face selection mode
-			elif bpy.context.tool_settings.mesh_select_mode[2]:
+			elif context.tool_settings.mesh_select_mode[2]:
 				element_count = len(active_object.data.polygons)
 		else:
 			element_count = len(active_object.data.splines)
@@ -194,7 +217,7 @@ class VF_PasteGeometry(bpy.types.Operator):
 		pasted_object.select_set(True)
 		
 		# Update the viewport and scene
-		bpy.context.view_layer.update()
+		context.view_layer.update()
 		
 		# Join pasted object with active object
 		bpy.ops.object.join()
