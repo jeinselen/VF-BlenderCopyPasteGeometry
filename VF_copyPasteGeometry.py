@@ -1,7 +1,7 @@
 bl_info = {
 	'name': 'VF Copy Paste Geometry',
 	'author': 'John Einselen - Vectorform LLC',
-	'version': (0, 0, 5),
+	'version': (0, 0, 6),
 	'blender': (3, 5, 0),
 	'location': 'Scene > VF Tools > Copy Paste',
 	'description': 'Copy and paste geometry using internal mesh system (prevents duplication of materials)',
@@ -17,7 +17,9 @@ import bpy
 
 class VF_CopyGeometry(bpy.types.Operator):
 	bl_idname = 'object.vf_copy_geometry'
-	bl_label = 'Copy'
+	bl_label = 'Cut/Copy Geometry'
+	bl_description = "Cuts or copies selected geometry from the active object"
+	bl_space_type = "VIEW_3D"
 	bl_options = {'REGISTER', 'UNDO'}
 	
 	copy: bpy.props.BoolProperty()
@@ -152,7 +154,9 @@ class VF_CopyGeometry(bpy.types.Operator):
 
 class VF_PasteGeometry(bpy.types.Operator):
 	bl_idname = 'object.vf_paste_geometry'
-	bl_label = 'Paste'
+	bl_label = 'Paste Geometry'
+	bl_description = "Pastes geometry to the active object"
+	bl_space_type = "VIEW_3D"
 	bl_options = {'REGISTER', 'UNDO'}
 	
 	@classmethod
@@ -246,13 +250,14 @@ class VF_PasteGeometry(bpy.types.Operator):
 # UI rendering class
 
 class VFTOOLS_PT_copy_paste_geometry(bpy.types.Panel):
+	bl_idname = 'VFTOOLS_PT_copy_paste_geometry'
+	bl_label = 'Copy Paste Geometry'
+	bl_description = "Cut, copy, and paste geometry"
 	bl_space_type = 'VIEW_3D'
 	bl_region_type = 'UI'
 	bl_category = 'VF Tools'
 	bl_order = 3
 	bl_options = {'DEFAULT_CLOSED'}
-	bl_label = 'Copy Paste Geometry'
-	bl_idname = 'VFTOOLS_PT_copy_paste_geometry'
 	
 	@classmethod
 	def poll(cls, context):
@@ -272,9 +277,9 @@ class VFTOOLS_PT_copy_paste_geometry(bpy.types.Panel):
 			row = layout.row(align = True)
 			button_cut = row.operator(VF_CopyGeometry.bl_idname, text = 'Cut')
 			button_cut.copy = False
-			button_copy = row.operator(VF_CopyGeometry.bl_idname)
+			button_copy = row.operator(VF_CopyGeometry.bl_idname, text = 'Copy')
 			button_copy.copy = True
-			button_paste = row.operator(VF_PasteGeometry.bl_idname)
+			button_paste = row.operator(VF_PasteGeometry.bl_idname, text = 'Paste')
 			
 			# Check for existing temporary objects and display the results
 			box = layout.box()
