@@ -1,7 +1,7 @@
 bl_info = {
 	'name': 'VF Copy Paste Geometry',
 	'author': 'John Einselen - Vectorform LLC',
-	'version': (0, 0, 7),
+	'version': (0, 0, 8),
 	'blender': (3, 5, 0),
 	'location': 'Scene > VF Tools > Copy Paste',
 	'description': 'Copy and paste geometry using internal mesh system (prevents duplication of materials)',
@@ -140,7 +140,7 @@ class VF_CopyGeometry(bpy.types.Operator):
 		bpy.data.objects.remove(temp_object)
 		
 		# If more than one object was originally selected, restore that selection set
-		if len(selected_objects) > 0:
+		if len(selected_objects) > 1:
 			# If we don't change modes when re-selecting the original objects, the selection will be updated but the multiple objects selected will remain in object mode
 			bpy.ops.object.mode_set(mode='OBJECT')
 			# Re-select previously selected objects
@@ -149,7 +149,7 @@ class VF_CopyGeometry(bpy.types.Operator):
 			# Switch back to edit mode, ensuring all selected objects are editable
 			bpy.ops.object.mode_set(mode='EDIT')
 		
-		print('element(s) copied')
+#		print('element(s) copied')
 		return {'FINISHED'}
 
 class VF_PasteGeometry(bpy.types.Operator):
@@ -172,8 +172,24 @@ class VF_PasteGeometry(bpy.types.Operator):
 		)
 	
 	def execute(self, context):
+		# Switch to object mode to ensure modified object selections are recognised in edit mode
+		# Toggling between object/edit is also required for Blender to recognise geometry selection changes (why is this a thing)
+		bpy.ops.object.mode_set(mode='OBJECT')
+		
+		# Save the current object selection
+		# To prevent weirdness, only cut/copy geometry from the active object
+		selected_objects = [obj for obj in context.selected_objects]
+		
 		# Get the current active object
 		active_object = context.active_object
+		
+		# Select only the active object
+		for obj in context.selected_objects:
+			if obj != active_object:
+				obj.select_set(False)
+				
+		# Toggle back into edit mode (even without object selection changes, this is required for Blender geometry selection recognition)
+		bpy.ops.object.mode_set(mode='EDIT')
 		
 		# Select everything, to be inverted after joining
 		if active_object.type == 'MESH':
@@ -236,15 +252,25 @@ class VF_PasteGeometry(bpy.types.Operator):
 			bpy.ops.curve.select_all(action='INVERT')
 			# This appears to not be working on nurb surfaces, and I don't know why
 		
-		print('element(s) pasted')
+		# If more than one object was originally selected, restore that selection set
+		if len(selected_objects) > 1:
+			# If we don't change modes when re-selecting the original objects, the selection will be updated but the multiple objects selected will remain in object mode
+			bpy.ops.object.mode_set(mode='OBJECT')
+			# Re-select previously selected objects
+			for obj in selected_objects:
+				obj.select_set(True)
+			# Switch back to edit mode, ensuring all selected objects are editable
+			bpy.ops.object.mode_set(mode='EDIT')
+		
+#		print('element(s) pasted')
 		return {'FINISHED'}
 
 ###########################################################################
 # Plugin preferences
-	
-	# Potential options:
-	# Option to disable persistent clipboard data (would not persist between close/open cycles)
-	# Option to preserve original location or new location
+
+	# Potential features:
+	# Option to disable clipboard data preservation (would not persist between close/open cycles)
+	# Option to preserve world space location (could be tricky since we're removing the object reference)
 
 ###########################################################################
 # UI rendering class
@@ -256,7 +282,7 @@ class VFTOOLS_PT_copy_paste_geometry(bpy.types.Panel):
 	bl_space_type = 'VIEW_3D'
 	bl_region_type = 'UI'
 	bl_category = 'VF Tools'
-	bl_order = 3
+	bl_order = 12
 	bl_options = {'DEFAULT_CLOSED'}
 	
 	@classmethod
@@ -310,7 +336,7 @@ def register():
 	# Add keyboard shortcuts
 	wm = bpy.context.window_manager
 	kc = wm.keyconfigs.addon
-	# Mesh keyboard commands (implements both Windows and MacOS default keymaps)
+	# Mesh keyboard commands (implements both Windows/Linux and MacOS default keymaps)
 	if kc:
 		km = wm.keyconfigs.addon.keymaps.new(name='3D View', space_type='VIEW_3D')
 		kmi = km.keymap_items.new(VF_CopyGeometry.bl_idname, 'X', 'PRESS', ctrl=True)
