@@ -320,7 +320,7 @@ class VFTOOLS_PT_copy_paste_geometry(bpy.types.Panel):
 				clipboardList.append('Meta')
 			box.label(text = 'Copied: ' + ', '.join(clipboardList))
 		except Exception as exc:
-			print(str(exc) + ' | Error in VF Vertex Location Keyframes panel')
+			print(str(exc) + ' | Error in VF Copy Paste Geometry panel')
 
 ###########################################################################
 # Addon registration functions
