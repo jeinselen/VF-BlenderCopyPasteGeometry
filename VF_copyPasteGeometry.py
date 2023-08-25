@@ -6,8 +6,8 @@ bl_info = {
 	'location': 'Scene > VF Tools > Copy Paste',
 	'description': 'Copy and paste geometry using internal mesh system (prevents duplication of materials)',
 	'warning': 'inexperienced developer, use at your own risk',
-	'wiki_url': '',
-	'tracker_url': '',
+	"doc_url": "https://github.com/jeinselenVF/VF-BlenderCopyPasteGeometry",
+	"tracker_url": "https://github.com/jeinselenVF/VF-BlenderCopyPasteGeometry/issues",
 	'category': 'Mesh'}
 
 import bpy
