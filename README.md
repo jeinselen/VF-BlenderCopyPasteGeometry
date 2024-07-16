@@ -1,4 +1,6 @@
 # VF Copy Paste Geometry
+This add-on was designed for Blender version 2.8-4.1 (though not all previous versions may be fully supported). For Blender 4.2 and onwards, [please see the new Mesh Kit extension](https://github.com/jeinselen/Blender-MeshKit).
+
 Adds object space copy and paste functionality for mesh and curve data in Blender.
 
 ![Screenshot of the Blender 3D View and the VF Copy Paste Geometry plugin interface; the paste command is highlighted with pasted geometry selected in the background](images/banner.jpg)
